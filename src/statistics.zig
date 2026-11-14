@@ -625,6 +625,14 @@ fn getLinesChanged(
                             self.emails,
                         ) catch |e| switch (e) {
                             error.GitNotInstalled => 0,
+                            error.CloneFailed => v: {
+                                std.log.info(
+                                    "Skipping {s}: could not clone (token " ++
+                                        "may not have access)",
+                                    .{item.repo.name},
+                                );
+                                break :v 0;
+                            },
                             else => return e,
                         };
                         std.log.info("Got {d} line{s} changed by {s} in {s}", .{
@@ -637,6 +645,17 @@ fn getLinesChanged(
                 } else {
                     try q.push(allocator, item);
                 }
+            },
+            // The access token can't see this repo (e.g., a fine-grained
+            // token without access, or the repo was deleted/renamed), so skip
+            // it instead of failing the whole run
+            .not_found, .unauthorized => |status| {
+                std.log.info(
+                    "Skipping lines changed for {s} ({?s}); token may not " ++
+                        "have access",
+                    .{ item.repo.name, status.phrase() },
+                );
+                item.repo.lines_changed = 0;
             },
             else => |status| {
                 std.log.info(
